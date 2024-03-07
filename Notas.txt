@@ -1,0 +1,2 @@
+Iniciar: https://naylampmechatronics.com/blog/16_tutorial-basico-nrf24l01-con-arduino.html
+Implementacion FHSS: https://www.youtube.com/watch?v=Ky3QOFydykY
