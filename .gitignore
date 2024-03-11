@@ -1,0 +1,6 @@
+/build/
+/debug/
+/build
+*.d
+*.lst
+*.elf

@@ -65,7 +65,7 @@
 #define STM32_USART1SEL                     STM32_USART1SEL_APB
 #define STM32_USART2SEL                     STM32_USART2SEL_APB
 #define STM32_LPUART1SEL                    STM32_LPUART1SEL_APB
-#define STM32_I2C1SEL                       STM32_I2C1SEL_APB
+#define STM32_I2C1SEL                       STM32_I2C1SEL_HSI16
 #define STM32_I2C3SEL                       STM32_I2C3SEL_APB
 #define STM32_LPTIM1SEL                     STM32_LPTIM1SEL_APB
 #define STM32_HSI48SEL                      STM32_HSI48SEL_HSI48
@@ -131,7 +131,7 @@
 /*
  * I2C driver system settings.
  */
-#define STM32_I2C_USE_I2C1                  FALSE
+#define STM32_I2C_USE_I2C1                  TRUE
 #define STM32_I2C_USE_I2C2                  FALSE
 #define STM32_I2C_USE_I2C3                  FALSE
 #define STM32_I2C_BUSY_TIMEOUT              50
@@ -143,7 +143,7 @@
 #define STM32_I2C_I2C2_DMA_PRIORITY         1
 #define STM32_I2C_I2C3_DMA_PRIORITY         1
 #define STM32_I2C_I2C1_RX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 7)
-#define STM32_I2C_I2C1_TX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 2)
+#define STM32_I2C_I2C1_TX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 6)
 #define STM32_I2C_I2C2_RX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 5)
 #define STM32_I2C_I2C2_TX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 4)
 #define STM32_I2C_I2C3_RX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 3)

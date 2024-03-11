@@ -52,18 +52,34 @@
 
 #include "rf.h"
 #include "string.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-#define  TRANSMITTER                          FALSE
+#define  TRANSMITTER
 
-#define  FRAME_LEN                            5
+#define  FRAME_LEN   5
 
+void leeVariablesC(void);
+void leeTension(float *vBat);
+void testssd1306(void);
+void ssd1306Init(void);
+void printfFilaSSD1306(uint8_t fila,char *msg);
+
+uint8_t estadoPuerta;  // abierto:0 cerrado:1 desconocido:2
+float vBatJaula;
+uint8_t porcBatJaula;
+bool commOk = false;
+
+float vBat, porcBat;
+
+char estadoStr[3][10] = {"Abierta", "Cerrado", "Puerta:?"};
 
 static const SPIConfig spicfg = {
   false,
   false,
   NULL,
   NULL,
-  GPIOB,
+  GPIOA,
   GPIOA_CS,
   SPI_CR1_BR_1 | SPI_CR1_BR_0,
   0
@@ -71,7 +87,7 @@ static const SPIConfig spicfg = {
 
 
 static RFConfig nrf24l01_cfg = {
-  .line_ce          = GPIOA_CE,
+  .line_ce          = LINE_CE,
   .line_irq         = LINE_IRQ,
   .spip             = &SPID1,
   .spicfg           = &spicfg,
@@ -102,11 +118,71 @@ void parpadear(uint8_t numVeces, uint16_t ms) {
     }
     palSetLineMode(LINE_LED, PAL_MODE_INPUT_ANALOG);
 }
+
+/*
+ * Timing values are taken from the RM except the PRESC set to 9 because
+ * the input clock is 72MHz. Con 16 MHz, debe ser dividir entre 2=>PRESC=1
+ * The timings are critical, please always refer to the STM32 Reference
+ * Manual before attempting changes.
+ */
+static const I2CConfig i2cconfig = {
+  STM32_TIMINGR_PRESC(1U) |
+  STM32_TIMINGR_SCLDEL(4U) | STM32_TIMINGR_SDADEL(2U) |
+  STM32_TIMINGR_SCLH(15U)  | STM32_TIMINGR_SCLL(21U),
+  0,
+  0
+};
+
+
+void initI2C1(void)
+{
+    palSetLineMode(LINE_I2C1SCL, PAL_MODE_ALTERNATE(4) | PAL_STM32_OSPEED_HIGHEST);
+    palSetLineMode(LINE_I2C1SDA, PAL_MODE_ALTERNATE(4) | PAL_STM32_OSPEED_HIGHEST);
+    palSetLineMode(LINE_ONDISPLAY, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST);
+    palSetLine(LINE_ONDISPLAY);
+    i2cStart(&I2CD1, &i2cconfig); // LCD
+}
+
+//            01234567890
+// respuesta "1  731  80"
+//            P   V   V%
+/*
+
+uint8_t estadoPuerta;  // abierto:0 cerrado:1 desconocido:2
+float vBatJaula;
+uint8_t porcBatJaula;
+bool commOk = false;
+ *const char estadoStr[3][10] = {"Abierta", "Cerrado", "Puerta:?"};
+ */
+void decodeStatus(char *buffer, uint8_t sizeofBuffer)
+{
+    char buff2[15];
+    if (sizeofBuffer<15)
+        return;
+    // estado puerta
+    char estadoChar = buffer[0];
+    if (estadoChar=='0')
+        estadoPuerta = 0;
+    else if (estadoChar=='1')
+        estadoPuerta = 1;
+    else
+        estadoPuerta = 2;
+    // tension %
+    porcBatJaula = atoi(&buffer[7]);
+    if (porcBatJaula>100)
+        porcBatJaula = 0;
+    buffer[7] = 0;
+    vBatJaula = 0.01f*atoi(&buffer[1]);
+    snprintf(buff2, sizeof(buff2),"RX:%.2fV%3d",vBatJaula,porcBatJaula);
+    printfFilaSSD1306(1,buff2);
+    printfFilaSSD1306(2,estadoStr[estadoPuerta]);
+}
+
 /*
  * Application entry point.
  */
 int main(void) {
-    char string[10];
+    char buffer[15], string[15];
   /*
    * System initializations.
    * - HAL initialization, this also initializes the configured device drivers
@@ -117,14 +193,22 @@ int main(void) {
   halInit();
   chSysInit();
 
+  initI2C1();
+  ssd1306Init();
+
   parpadear(3,200);
+  leeVariablesC();
+  leeTension(&vBat);
+
+  snprintf(buffer, sizeof(buffer),"TX:%.2fV",vBat);
+  printfFilaSSD1306(0,buffer);
 
   /*
    * SPID1 I/O pins setup.(It bypasses board.h configurations)
    */
-  palSetLineMode(LINE_SPI1SCK, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
-  palSetLineMode(LINE_SPI1MISO, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
-  palSetLineMode(LINE_SPI1MOSI, PAL_MODE_ALTERNATE(5) | PAL_STM32_OSPEED_HIGHEST);
+  palSetLineMode(LINE_SPI1SCK, PAL_MODE_ALTERNATE(0) | PAL_STM32_OSPEED_HIGHEST);
+  palSetLineMode(LINE_SPI1MISO, PAL_MODE_ALTERNATE(0) | PAL_STM32_OSPEED_HIGHEST);
+  palSetLineMode(LINE_SPI1MOSI, PAL_MODE_ALTERNATE(0) | PAL_STM32_OSPEED_HIGHEST);
   palSetLineMode(LINE_CS, PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST);
   /*
    * CE and IRQ pins setup.
@@ -141,24 +225,47 @@ int main(void) {
   /* Starting RF driver. */
   rfStart(&RFD1, &nrf24l01_cfg);
 
+  estadoPuerta = 2;
+  commOk = false;
+  uint16_t msSinEstado = 20000;
+
   while (TRUE) {
-#if TRANSMITTER == TRUE
-    rf_msg_t msg;
-    string[0] = '\0';
+#ifdef TRANSMITTER
+    rf_msg_t msgRx, msgTx;
     while(TRUE){
-      msg = rfTransmitString(&RFD1, "Hola", "RXadd", TIME_MS2I(75));
-      if(msg == RF_OK){
-          parpadear(1,150);
-      }
-      else if(msg == RF_ERROR){
-          parpadear(3,150);
-//        chnWrite(&SD2, (const uint8_t *)"Message not sent (MAX_RT)\n\r", 27);
-      }
-      else{
-          parpadear(5,150);
-//        chnWrite(&SD2, (const uint8_t *)"Message not sent (TIMEOUT)\n\r", 28);
-      }
-      chThdSleepMilliseconds(500);
+        uint8_t estadoPuertaDeseada = palReadLine(LINE_SENSOR);
+        if (estadoPuertaDeseada != estadoPuerta)
+        {
+            snprintf(buffer, sizeof(buffer),"PUERTA:%d",estadoPuertaDeseada);
+            msgTx = rfTransmitString(&RFD1, buffer, "RXadd", TIME_MS2I(75));
+            if(msgTx == RF_ERROR)
+                continue;
+            msgRx = rfReceiveString(&RFD1, string, "RXadd", TIME_MS2I(100));
+            if(msgRx == RF_OK) {
+                commOk = true;
+                decodeStatus(string,sizeof(string));
+            }
+            else
+                commOk = false;
+        }
+        else
+        {
+            if (msSinEstado>10000)
+            {
+                msgTx = rfTransmitString(&RFD1, "ESTADO", "RXadd", TIME_MS2I(75));
+                if(msgTx == RF_ERROR)
+                    continue;
+                msgRx = rfReceiveString(&RFD1, string, "RXadd", TIME_MS2I(100));
+                if(msgRx == RF_OK) {
+                    msSinEstado = 0;
+                    commOk = true;
+                    decodeStatus(string,sizeof(string));
+                }
+            }
+            else
+                msSinEstado += 10;
+        }
+        chThdSleepMilliseconds(10);
     }
 #else
     string[0] = '\0';

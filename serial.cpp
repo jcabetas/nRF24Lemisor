@@ -14,11 +14,8 @@ using namespace chibios_rt;
 #include "string.h"
 #include <stdlib.h>
 #include "chprintf.h"
-#include "calendarUTC.h"
-#include <w25q16/w25q16.h>
 #include "variables.h"
 #include "version.h"
-#include "flashVars.h"
 
 extern "C" {
     void initSerial(void);

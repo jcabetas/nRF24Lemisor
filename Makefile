@@ -85,7 +85,7 @@ endif
 #
 
 # Define project name here
-PROJECT = nrf24receptor
+PROJECT = nrf24emisor
 
 # Target settings.
 MCU  = cortex-m0
@@ -108,7 +108,7 @@ include $(CHIBIOS)/os/common/startup/ARMCMx/compilers/GCC/mk/startup_stm32l0xx.m
 # HAL-OSAL files (optional).
 include $(CHIBIOS)/os/hal/hal.mk
 include $(CHIBIOS)/os/hal/ports/STM32/STM32L0xx/platform.mk
-include alimentadorEE4board/board.mk
+include alimentadorEmisor/board.mk
 include $(CHIBIOS)/os/hal/osal/rt-nil/osal.mk
 # RTOS files (optional).
 include $(CHIBIOS)/os/rt/rt.mk
@@ -127,14 +127,12 @@ LDSCRIPT= $(STARTUPLD)/STM32L073xZ.ld
 # setting.
 CSRC = $(ALLCSRC) \
        $(CHIBIOS)/os/various/evtimer.c \
-       main.c nrf24l01/rf.c
-#       $(CHIBIOS)/os/various/syscalls.c \
-#       $(CONFDIR)/portab.c usbcfg.c \
+       main.c nrf24l01/rf.c  ssd1306/testssd1306.c ssd1306/ssd1306.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global
 # setting.
 CPPSRC = $(ALLCPPSRC) tty/gets.cpp serial.cpp \
- 					  servoPWM.cpp  ADC/adcUtils.cpp version.cpp \
+ 					  ADC/adcUtils.cpp version.cpp \
  					  eeprom/eeprom.cpp variables.cpp
  					  
 #        \
