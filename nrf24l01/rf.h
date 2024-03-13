@@ -424,7 +424,8 @@ typedef uint8_t NRF24L01_RF_CH_t;
 typedef enum {
 
   NRF24L01_ADR_1Mbps = 0x00,             /*!< Air data rate 1 Mbps */
-  NRF24L01_ADR_2Mbps = 0x08              /*!< Air data rate 2 Mbps */
+  NRF24L01_ADR_2Mbps = 0x08,             /*!< Air data rate 2 Mbps */
+  NRF24L01_ADR_250kbps = 0x20             /*!< Air data rate 250 kbps */
 } NRF24L01_ADR_t;
 
 /**

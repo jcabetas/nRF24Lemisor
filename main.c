@@ -71,6 +71,9 @@ uint8_t porcBatJaula;
 bool commOk = false;
 
 float vBat, porcBat;
+uint16_t paqSent = 0;
+uint16_t paqRecd = 0;
+bool cambioPuerta, cambioBatJaula, cambioComm;
 
 char estadoStr[3][10] = {"Abierta", "Cerrado", "Puerta:?"};
 
@@ -94,10 +97,10 @@ static RFConfig nrf24l01_cfg = {
   .auto_retr_count  = NRF24L01_ARC_15_times,
   .auto_retr_delay  = NRF24L01_ARD_4000us,
   .address_width    = NRF24L01_AW_5_bytes,
-  .channel_freq     = 120,
-  .data_rate        = NRF24L01_ADR_2Mbps,
+  .channel_freq     = 60,                       // antes 120
+  .data_rate        = NRF24L01_ADR_250kbps,
   .out_pwr          = NRF24L01_PWR_0dBm,
-  .lna              = NRF24L01_LNA_disabled,
+  .lna              = NRF24L01_LNA_enabled,
   .en_dpl           = NRF24L01_DPL_enabled,
   .en_ack_pay       = NRF24L01_ACK_PAY_disabled,
   .en_dyn_ack       = NRF24L01_DYN_ACK_disabled
@@ -156,7 +159,7 @@ bool commOk = false;
  */
 void decodeStatus(char *buffer, uint8_t sizeofBuffer)
 {
-    char buff2[15];
+    uint8_t estadoPuertaOld = estadoPuerta;
     if (sizeofBuffer<15)
         return;
     // estado puerta
@@ -167,15 +170,34 @@ void decodeStatus(char *buffer, uint8_t sizeofBuffer)
         estadoPuerta = 1;
     else
         estadoPuerta = 2;
+    if (estadoPuertaOld != estadoPuerta)
+        cambioPuerta = true;
     // tension %
+    uint8_t porcBatJaulaOld = porcBatJaula;
     porcBatJaula = atoi(&buffer[7]);
     if (porcBatJaula>100)
         porcBatJaula = 0;
+    if (porcBatJaulaOld != porcBatJaula)
+        cambioBatJaula = true;
     buffer[7] = 0;
     vBatJaula = 0.01f*atoi(&buffer[1]);
-    snprintf(buff2, sizeof(buff2),"RX:%.2fV%3d",vBatJaula,porcBatJaula);
-    printfFilaSSD1306(1,buff2);
-    printfFilaSSD1306(2,estadoStr[estadoPuerta]);
+}
+
+// bool cambioPuerta, cambioBatJaula, cambioComm;
+void ponStatus(void)
+{
+    char buff2[15];    //    snprintf(buff2, sizeof(buff2),"RX:%.2fV%3d",vBatJaula,porcBatJaula);
+    if (cambioComm)
+    {
+        snprintf(buff2, sizeof(buff2),"S:%d %d",paqSent, paqSent-paqRecd);
+        printfFilaSSD1306(1,buff2);
+        cambioComm = false;
+    }
+    if (cambioPuerta)
+    {
+        printfFilaSSD1306(2,estadoStr[estadoPuerta]);
+        cambioPuerta = false;
+    }
 }
 
 /*
@@ -228,6 +250,11 @@ int main(void) {
   estadoPuerta = 2;
   commOk = false;
   uint16_t msSinEstado = 20000;
+  // bool cambioPuerta, cambioBatJaula, cambioComm;
+  cambioPuerta = true;
+  cambioBatJaula = true;
+  cambioComm = true;
+  ponStatus();
 
   while (TRUE) {
 #ifdef TRANSMITTER
@@ -238,32 +265,46 @@ int main(void) {
         {
             snprintf(buffer, sizeof(buffer),"PUERTA:%d",estadoPuertaDeseada);
             msgTx = rfTransmitString(&RFD1, buffer, "RXadd", TIME_MS2I(75));
+            paqSent++;
+            cambioComm = true;
             if(msgTx == RF_ERROR)
+            {
+                ponStatus();
                 continue;
+            }
             msgRx = rfReceiveString(&RFD1, string, "RXadd", TIME_MS2I(100));
             if(msgRx == RF_OK) {
                 commOk = true;
+                paqRecd++;
                 decodeStatus(string,sizeof(string));
             }
             else
                 commOk = false;
+            ponStatus();
         }
         else
         {
-            if (msSinEstado>10000)
+            if (msSinEstado>20)
             {
                 msgTx = rfTransmitString(&RFD1, "ESTADO", "RXadd", TIME_MS2I(75));
+                paqSent++;
+                cambioComm = true;
                 if(msgTx == RF_ERROR)
+                {
+                    ponStatus();
                     continue;
+                }
                 msgRx = rfReceiveString(&RFD1, string, "RXadd", TIME_MS2I(100));
                 if(msgRx == RF_OK) {
                     msSinEstado = 0;
                     commOk = true;
+                    paqRecd++;
                     decodeStatus(string,sizeof(string));
                 }
             }
             else
                 msSinEstado += 10;
+            ponStatus();
         }
         chThdSleepMilliseconds(10);
     }
